@@ -1,0 +1,304 @@
+name: Viral Animal Video Pipeline
+
+on:
+  schedule:
+    # Every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Number of videos to generate"
+        required: false
+        default: "1"
+      dry_run:
+        description: "Dry run (script gen only)"
+        required: false
+        default: "false"
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # 2 hours per run max
+
+    steps:
+      # ──────────────────────────────────────────
+      # 1. Checkout
+      # ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      # ──────────────────────────────────────────
+      # 2. Python setup
+      # ──────────────────────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      # ──────────────────────────────────────────
+      # 3. System dependencies (FFmpeg + fonts)
+      # ──────────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            ffmpeg \
+            fonts-dejavu-core \
+            fonts-liberation \
+            libsndfile1
+
+      # ──────────────────────────────────────────
+      # 4. Python dependencies
+      # ──────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ──────────────────────────────────────────
+      # 5. Configure Kaggle credentials
+      # ──────────────────────────────────────────
+      - name: Configure Kaggle credentials
+        run: |
+          mkdir -p ~/.kaggle
+          echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' \
+            > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      # ──────────────────────────────────────────
+      # 6. Restore memory file from cache
+      # ──────────────────────────────────────────
+      - name: Restore video memory
+        uses: actions/cache@v4
+        with:
+          path: video_memory.json
+          key: video-memory-${{ github.run_number }}
+          restore-keys: |
+            video-memory-
+
+      # ──────────────────────────────────────────
+      # 7. Run pipeline
+      # ──────────────────────────────────────────
+      - name: Run video pipeline
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          WAVEL_API_KEY: ${{ secrets.WAVEL_API_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          COUNT=${{ github.event.inputs.count || '1' }}
+          DRY_RUN=${{ github.event.inputs.dry_run || 'false' }}
+
+          EXTRA_ARGS=""
+          if [ "$DRY_RUN" = "true" ]; then
+            EXTRA_ARGS="--dry-run"
+          fi
+
+          python -m src.pipeline --count "$COUNT" $EXTRA_ARGS
+
+      # ──────────────────────────────────────────
+      # 8. Upload final video artifact
+      # ──────────────────────────────────────────
+      - name: Upload video artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viral-videos-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            output/*_manifest.json
+            output/*.srt
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ──────────────────────────────────────────
+      # 9. Upload script JSON artifact (for debugging)
+      # ──────────────────────────────────────────
+      - name: Upload script artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripts-${{ github.run_number }}
+          path: |
+            tmp/**/*_script.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # ──────────────────────────────────────────
+      # 10. Save updated memory file
+      # ──────────────────────────────────────────
+      - name: Commit updated memory file
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add video_memory.json || true
+          git diff --staged --quiet || git commit -m "chore: update video memory [skip ci]"
+          git push || true
+
+      # ──────────────────────────────────────────
+      # 11. Notify on failure
+      # ──────────────────────────────────────────
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Pipeline failed on run ${{ github.run_number }}"
+          echo "Check artifacts for logs."
+name: Viral Animal Video Pipeline
+
+on:
+  schedule:
+    # Every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Number of videos to generate"
+        required: false
+        default: "1"
+      dry_run:
+        description: "Dry run (script gen only)"
+        required: false
+        default: "false"
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120   # 2 hours per run max
+
+    steps:
+      # ──────────────────────────────────────────
+      # 1. Checkout
+      # ──────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      # ──────────────────────────────────────────
+      # 2. Python setup
+      # ──────────────────────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      # ──────────────────────────────────────────
+      # 3. System dependencies (FFmpeg + fonts)
+      # ──────────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            ffmpeg \
+            fonts-dejavu-core \
+            fonts-liberation \
+            libsndfile1
+
+      # ──────────────────────────────────────────
+      # 4. Python dependencies
+      # ──────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ──────────────────────────────────────────
+      # 5. Configure Kaggle credentials
+      # ──────────────────────────────────────────
+      - name: Configure Kaggle credentials
+        run: |
+          mkdir -p ~/.kaggle
+          echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' \
+            > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      # ──────────────────────────────────────────
+      # 6. Restore memory file from cache
+      # ──────────────────────────────────────────
+      - name: Restore video memory
+        uses: actions/cache@v4
+        with:
+          path: video_memory.json
+          key: video-memory-${{ github.run_number }}
+          restore-keys: |
+            video-memory-
+
+      # ──────────────────────────────────────────
+      # 7. Run pipeline
+      # ──────────────────────────────────────────
+      - name: Run video pipeline
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          WAVEL_API_KEY: ${{ secrets.WAVEL_API_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          COUNT=${{ github.event.inputs.count || '1' }}
+          DRY_RUN=${{ github.event.inputs.dry_run || 'false' }}
+
+          EXTRA_ARGS=""
+          if [ "$DRY_RUN" = "true" ]; then
+            EXTRA_ARGS="--dry-run"
+          fi
+
+          python -m src.pipeline --count "$COUNT" $EXTRA_ARGS
+
+      # ──────────────────────────────────────────
+      # 8. Upload final video artifact
+      # ──────────────────────────────────────────
+      - name: Upload video artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viral-videos-${{ github.run_number }}
+          path: |
+            output/*.mp4
+            output/*_manifest.json
+            output/*.srt
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ──────────────────────────────────────────
+      # 9. Upload script JSON artifact (for debugging)
+      # ──────────────────────────────────────────
+      - name: Upload script artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripts-${{ github.run_number }}
+          path: |
+            tmp/**/*_script.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # ──────────────────────────────────────────
+      # 10. Save updated memory file
+      # ──────────────────────────────────────────
+      - name: Commit updated memory file
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add video_memory.json || true
+          git diff --staged --quiet || git commit -m "chore: update video memory [skip ci]"
+          git push || true
+
+      # ──────────────────────────────────────────
+      # 11. Notify on failure
+      # ──────────────────────────────────────────
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Pipeline failed on run ${{ github.run_number }}"
+          echo "Check artifacts for logs."
