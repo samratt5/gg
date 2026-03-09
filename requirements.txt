@@ -1,0 +1,25 @@
+# ── Core API clients ──────────────────────────────────────────────────────
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# ── Kaggle integration ────────────────────────────────────────────────────
+kaggle>=1.6.0
+
+# ── Audio processing ──────────────────────────────────────────────────────
+pydub>=0.25.1
+
+# ── Subtitle generation (WhisperX) ───────────────────────────────────────
+# whisperx must be installed separately if not on GPU runner:
+# pip install git+https://github.com/m-bain/whisperX.git
+# Uncomment below if running on GPU:
+# whisperx
+
+# ── PyTorch (CPU wheel for GitHub Actions runner) ─────────────────────────
+# For GPU runner, change to: torch>=2.1.0 --index-url https://download.pytorch.org/whl/cu121
+torch>=2.1.0
+torchaudio>=2.1.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────
+numpy>=1.24.0
+Pillow>=10.0.0
+ffmpeg-python>=0.2.0
